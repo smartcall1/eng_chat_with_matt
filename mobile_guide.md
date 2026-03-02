@@ -17,7 +17,7 @@ termux-setup-storage
 ```
 
 ## 2. 프로젝트 가져오기 및 설치
-git clone https://github.com/smartcall1/ENG_matt.git
+git clone https://github.com/smartcall1/eng_chat_with_matt.git
 
 ```bash
 # 가상환경 생성 및 진입
