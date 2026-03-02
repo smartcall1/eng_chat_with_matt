@@ -81,9 +81,9 @@ def generate_chat_response(history: list, new_message: str) -> dict:
         # 새 메시지 추가
         contents.append(types.Content(role="user", parts=[types.Part(text=new_message)]))
 
-        # 1.5 Flash 모델로 명시하여 할당량 에러 방지 (기존 gemini-flash-latest와 호환)
+        # Gemini 2.5 Flash (유료 플랜 - 할당량 제한 없음)
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 temperature=0.7,
@@ -91,10 +91,6 @@ def generate_chat_response(history: list, new_message: str) -> dict:
             ),
             contents=contents
         )
-
-
-
-
         
         response_text = response.text
         logger.info(f"RAW GEMINI RESPONSE:\n{response_text}")
@@ -107,7 +103,6 @@ def generate_chat_response(history: list, new_message: str) -> dict:
             "feedbacks": extra_data.get("feedbacks", []),
             "image_url": _generate_image_url(extra_data.get("image_prompt"))
         }
-
         
     except Exception as e:
         logger.error(f"Error generating response from Gemini: {e}")
