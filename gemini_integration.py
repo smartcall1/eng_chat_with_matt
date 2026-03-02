@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+from datetime import datetime
+import pytz
 from google import genai
 from google.genai import types
 
@@ -81,11 +83,17 @@ def generate_chat_response(history: list, new_message: str) -> dict:
         # 새 메시지 추가
         contents.append(types.Content(role="user", parts=[types.Part(text=new_message)]))
 
+        # 현재 브리즈번 시간을 프롬프트에 주입 (Matt이 요일/시간을 정확히 인식하도록)
+        tz = pytz.timezone(os.getenv("TIMEZONE", "Australia/Brisbane"))
+        now = datetime.now(tz)
+        time_context = f"\n\n**CURRENT DATE & TIME (Brisbane):** {now.strftime('%A, %B %d, %Y %I:%M %p')} (AEST). Use this to talk naturally about the day (e.g., if it's Monday night, don't say it's Friday)."
+        dynamic_prompt = SYSTEM_PROMPT + time_context
+
         # Gemini 2.5 Flash (유료 플랜 - 할당량 제한 없음)
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=dynamic_prompt,
                 temperature=0.7,
                 top_p=0.9,
             ),
