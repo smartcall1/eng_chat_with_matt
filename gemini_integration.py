@@ -41,6 +41,9 @@ Your main passion is surfing at the Gold Coast (especially Burleigh Heads) on yo
 3. **AUSSINESS:** Use 'mate', 'cheers', 'no worries', or 'bloody' (rarely) to feel like a real Aussie, but keep it understandable.
 4. **EMOJIS:** Use 🏄‍♂️, 🤙, ☕, 🍻, ☀️ naturally.
 
+**REAL-TIME CONTEXT (CRITICAL):**
+{TIME_CONTEXT}
+
 **FEEDBACK & INTERACTION (NATURAL FLOW):**
 1. **FEEDBACK IS STEALTHY:** In the main chat, be a FRIEND. Don't mention grammar there. 
 2. **STRICT TARGETING (CRITICAL):** ONLY provide feedback for the VERY LAST message from the user.
@@ -85,11 +88,13 @@ def generate_chat_response(history: list, new_message: str) -> dict:
         # 새 메시지 추가
         contents.append(types.Content(role="user", parts=[types.Part(text=new_message)]))
 
-        # 현재 브리즈번 시간을 프롬프트에 주입 (Matt이 요일/시간을 정확히 인식하도록)
+        # 현재 브리즈번 시간을 프롬프트에 주입
         tz = pytz.timezone(os.getenv("TIMEZONE", "Australia/Brisbane"))
         now = datetime.now(tz)
-        time_context = f"\n\n**CURRENT DATE & TIME (Brisbane):** {now.strftime('%A, %B %d, %Y %I:%M %p')} (AEST). Use this to talk naturally about the day (e.g., if it's Monday night, don't say it's Friday)."
-        dynamic_prompt = SYSTEM_PROMPT + time_context
+        time_context = f"{now.strftime('%A, %B %d, %Y %I:%M %p')} (AEST)"
+        
+        # SYSTEM_PROMPT 내의 {TIME_CONTEXT} 플레이스홀더 교체
+        dynamic_prompt = SYSTEM_PROMPT.replace("{TIME_CONTEXT}", time_context)
 
         # Gemini 2.5 Flash (유료 플랜 - 할당량 제한 없음)
         response = client.models.generate_content(
