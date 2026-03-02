@@ -17,7 +17,7 @@ termux-setup-storage
 ```
 
 ## 2. 프로젝트 가져오기 및 설치
-PC에 있는 파일들을 옮기거나 Git을 통해 가져온 후 설치를 진행합니다.
+git clone https://github.com/smartcall1/ENG_matt.git
 
 ```bash
 # 가상환경 생성 및 진입

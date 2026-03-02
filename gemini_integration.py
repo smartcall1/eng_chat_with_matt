@@ -36,17 +36,24 @@ You are outgoing, friendly, and very interested in South Korea.
 - ALWAYS end your message with a simple question to keep the chat going.
 - YOU MUST also output a hidden JSON block at the very end.
 
+**IMAGE GENERATION:**
+- If the conversation naturally suggests showing an image (e.g., "See this surfboard", "Look at the beach", "I'll draw this for you"), include a "image_prompt" field in the hidden JSON.
+- The "image_prompt" should be a clear English description for an AI image generator.
+
 Format your entire response like this:
 [Your simple conversational response here as Matt]
 
 ---FEEDBACK_JSON_START---
-[
-  {
-    "original": "The user's incorrect sentence",
-    "corrected": "Corrected simple version",
-    "explanation": "Explain why it's better in KOREAN (한국어로 아주 쉽고 짧게 설명)."
-  }
-]
+{
+  "feedbacks": [
+    {
+      "original": "The user's incorrect sentence",
+      "corrected": "Corrected simple version",
+      "explanation": "Explain why it's better in KOREAN."
+    }
+  ],
+  "image_prompt": "A sunny beach in Brisbane with surfboards, 4k, cinematic" 
+}
 ---FEEDBACK_JSON_END---
 """
 
@@ -86,11 +93,12 @@ def generate_chat_response(history: list, new_message: str) -> dict:
         response_text = response.text
         
         # 응답 파싱
-        reply_msg, feedbacks = _parse_response(response_text)
+        reply_msg, extra_data = _parse_response(response_text)
         
         return {
             "reply": reply_msg,
-            "feedbacks": feedbacks
+            "feedbacks": extra_data.get("feedbacks", []),
+            "image_url": _generate_image_url(extra_data.get("image_prompt"))
         }
 
         
@@ -102,11 +110,11 @@ def generate_chat_response(history: list, new_message: str) -> dict:
         }
 
 def _parse_response(text: str) -> tuple:
-    """Gemini 응답에서 텍스트와 숨겨진 Feedback JSON을 분리합니다."""
+    """Gemini 응답에서 텍스트와 숨겨진 Extra JSON을 분리합니다."""
     start_tag = "---FEEDBACK_JSON_START---"
     end_tag = "---FEEDBACK_JSON_END---"
     
-    feedbacks = []
+    extra_data = {}
     reply_text = text
     
     start_idx = text.find(start_tag)
@@ -117,8 +125,25 @@ def _parse_response(text: str) -> tuple:
         json_str = text[start_idx + len(start_tag):end_idx].strip()
         try:
             if json_str:
-                feedbacks = json.loads(json_str)
+                extra_data = json.loads(json_str)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse feedback JSON: {e}\nRaw JSON: {json_str}")
+            logger.error(f"Failed to parse extra JSON: {e}\nRaw JSON: {json_str}")
             
-    return reply_text, feedbacks
+    return reply_text, extra_data
+
+def _generate_image_url(prompt: str) -> str:
+    """Pollinations.ai를 사용하여 이미지 URL을 생성합니다 (더 안정적인 엔드포인트 사용)."""
+    if not prompt:
+        return None
+    
+    import urllib.parse
+    # 프롬프트에 스타일 보강 및 인코딩
+    better_prompt = f"{prompt}, high quality, cinematic, realistic"
+    encoded_prompt = urllib.parse.quote(better_prompt)
+    
+    # 더 안정적이고 직접적인 이미지 엔드포인트 사용
+    # https://image.pollinations.ai/prompt/{prompt}
+    styled_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&enhance=true"
+    
+    logger.info(f"Generated Image URL: {styled_url}")
+    return styled_url

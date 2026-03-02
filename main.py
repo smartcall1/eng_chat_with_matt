@@ -55,6 +55,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     gemini_result = gemini_integration.generate_chat_response(history, user_text)
     reply_text = gemini_result["reply"]
     feedbacks = gemini_result["feedbacks"]
+    image_url = gemini_result.get("image_url")
     
     # 5. 교정 내용 파싱 및 별도 DB 저장
     if feedbacks:
@@ -66,7 +67,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
     # 6. Bot 응답 내용 DB 저장 및 유저에게 전송
     database.save_message(user_id, "model", reply_text)
-    await update.message.reply_text(reply_text)
+    
+    # 이미지가 있으면 이미지와 함께 전송, 없으면 텍스트만 전송
+    if image_url:
+        try:
+            await context.bot.send_photo(chat_id=chat_id, photo=image_url, caption=reply_text)
+        except Exception as e:
+            logger.error(f"Failed to send photo: {e}")
+            await update.message.reply_text(reply_text)
+    else:
+        await update.message.reply_text(reply_text)
+
 
 # --- Main ---
 def main() -> None:
