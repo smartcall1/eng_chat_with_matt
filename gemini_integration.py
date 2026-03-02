@@ -28,31 +28,38 @@ You are outgoing, friendly, and very interested in South Korea.
 2. **SHORT SENTENCES:** Keep your sentences short and clear. 
 3. **CONVERSATIONAL BUT EASY:** Use a natural, spoken style, but don't overdo it with difficult slang. 
 4. **SLANG LIMIT:** Occasionally use 'mate' or 'cheers', but keep other Aussie slang to a minimum so the user can understand easily.
-5. **NAME:** Your name is Matt. Never call yourself Alex or any other name.
+5. **EMOJIS:** Use emojis occasionally (like 🏄‍♂️, 🤙, 🏝️, 🍻, ☕) to feel more human and friendly. Don't use them in every single sentence, just naturally.
+6. **NAME:** Your name is Matt. Never call yourself Alex or any other name.
 
-**FEEDBACK & INTERACTION:**
-- Reply naturally to the user.
-- IF they make a mistake, don't correct them in the chat. Just reply naturally using the correct grammar (Rephrasing).
-- ALWAYS end your message with a simple question to keep the chat going.
-- YOU MUST also output a hidden JSON block at the very end.
+**FEEDBACK & INTERACTION (VERY IMPORTANT):**
+1. **BE STRICT BUT KIND:** Capture even small mistakes (grammar, spelling, natural phrasing). 
+2. **DON'T DISRUPT THE CHAT:** In the conversational part, just reply naturally using correct English.
+3. **DETAILED JSON FEEDBACK:** In the hidden JSON block, YOU MUST provide corrections for any errors you find. 
+   - **IGNORE MINOR STUFF:** Do NOT provide feedback for capitalization (e.g., lowercase 'i' or starting a sentence with lowercase) or missing simple periods at the end of a chat. These are normal in casual chatting.
+   - **FOCUS ON:** Capture real grammar mistakes, spelling errors, or unnatural phrasing that would sound weird to a native speaker.
+   - **If the user's sentence is natural, the list must be empty `[]`.**
+   - **Explanation:** Write in KOREAN. Be very specific and friendly (반말).
+4. **IMAGE GENERATION:**
+   - If naturally needed, include an "image_prompt".
+   - **CRITICAL:** "image_prompt" MUST BE LESS THAN 10 WORDS. Keywords only. No full sentences. (e.g., "Surfer standing on Brisbane beach, sunny, realistic")
+5. **ALWAYS end your message with a simple question.**
 
-**IMAGE GENERATION:**
-- If the conversation naturally suggests showing an image (e.g., "See this surfboard", "Look at the beach", "I'll draw this for you"), include a "image_prompt" field in the hidden JSON.
-- The "image_prompt" should be a clear English description for an AI image generator.
+**IMPORTANT RULES FOR JSON BLOCK (DO NOT IGNORE):**
+1. You MUST ALWAYS append the EXACT JSON format block at the very end of every single response.
+2. Even if there are no feedbacks and no image to generate, you MUST still output the JSON block with empty lists/strings.
+3. The tags `---FEEDBACK_JSON_START---` and `---FEEDBACK_JSON_END---` must be written exactly as shown.
 
-Format your entire response like this:
-[Your simple conversational response here as Matt]
-
+**JSON FORMAT BLOCK:**
 ---FEEDBACK_JSON_START---
 {
   "feedbacks": [
     {
-      "original": "The user's incorrect sentence",
-      "corrected": "Corrected simple version",
-      "explanation": "Explain why it's better in KOREAN."
+      "original": "The user's incorrect or awkward sentence",
+      "corrected": "The most natural and correct version",
+      "explanation": "한국어로 쉽고 구체적인 설명 (왜 틀렸는지, 어떤 차이가 있는지)"
     }
   ],
-  "image_prompt": "A sunny beach in Brisbane with surfboards, 4k, cinematic" 
+  "image_prompt": "A short English keyword description for an image, or empty string if not needed" 
 }
 ---FEEDBACK_JSON_END---
 """
@@ -75,9 +82,9 @@ def generate_chat_response(history: list, new_message: str) -> dict:
         # 새 메시지 추가
         contents.append(types.Content(role="user", parts=[types.Part(text=new_message)]))
 
-        # API 호출 (2.0-lite에서 할당량 제한이 0으로 뜬다면, 상위 모델인 2.5-flash 시도)
+        # 2.0 모델이 0 한도 에러를 뱉는 경우가 있어, 가장 안정적인 gemini-flash-latest(1.5 Flash) 사용
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-flash-latest",
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 temperature=0.7,
@@ -91,6 +98,7 @@ def generate_chat_response(history: list, new_message: str) -> dict:
 
         
         response_text = response.text
+        logger.info(f"RAW GEMINI RESPONSE:\n{response_text}")
         
         # 응답 파싱
         reply_msg, extra_data = _parse_response(response_text)
@@ -123,6 +131,17 @@ def _parse_response(text: str) -> tuple:
     if start_idx != -1 and end_idx != -1:
         reply_text = text[:start_idx].strip()
         json_str = text[start_idx + len(start_tag):end_idx].strip()
+        
+        # 마크다운 블록 제거
+        if json_str.startswith("```json"):
+            json_str = json_str[7:]
+        elif json_str.startswith("```"):
+            json_str = json_str[3:]
+        if json_str.endswith("```"):
+            json_str = json_str[:-3]
+            
+        json_str = json_str.strip()
+        
         try:
             if json_str:
                 extra_data = json.loads(json_str)
@@ -132,18 +151,8 @@ def _parse_response(text: str) -> tuple:
     return reply_text, extra_data
 
 def _generate_image_url(prompt: str) -> str:
-    """Pollinations.ai를 사용하여 이미지 URL을 생성합니다 (더 안정적인 엔드포인트 사용)."""
-    if not prompt:
-        return None
-    
-    import urllib.parse
-    # 프롬프트에 스타일 보강 및 인코딩
-    better_prompt = f"{prompt}, high quality, cinematic, realistic"
-    encoded_prompt = urllib.parse.quote(better_prompt)
-    
-    # 더 안정적이고 직접적인 이미지 엔드포인트 사용
-    # https://image.pollinations.ai/prompt/{prompt}
-    styled_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&enhance=true"
-    
-    logger.info(f"Generated Image URL: {styled_url}")
-    return styled_url
+    """이미지 생성 기능 - 현재 모든 테스트한 서비스가 차단/불안정하여 임시 비활성화."""
+    # TODO: Pollinations 530, Unsplash 503, Lexica error, Imagen3 404
+    # 안정적인 이미지 API가 확보되면 다시 활성화 예정
+    return None
+

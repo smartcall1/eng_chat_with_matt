@@ -42,11 +42,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # 1. 수신 시간 및 세션 업데이트
     database.update_last_interaction(user_id, chat_id)
     
-    # 2. 유저 메시지 DB 저장
-    database.save_message(user_id, "user", user_text)
-    
-    # 3. 로컬 DB에서 해당 유저의 최근 대화 Context 로딩 (10개)
+    # 2. 로컬 DB에서 해당 유저의 최근 대화 Context 로딩 (10개)
+    # 현재 메시지를 저장하기 전에 가져와야 Gemini에게 넘길 때 중복되지 않음
     history = database.get_recent_context(user_id, limit=10)
+    
+    # 3. 유저 메시지 DB 저장
+    database.save_message(user_id, "user", user_text)
     
     # "is typing..." 상태 표시
     await context.bot.send_chat_action(chat_id=chat_id, action='typing')
@@ -68,15 +69,65 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # 6. Bot 응답 내용 DB 저장 및 유저에게 전송
     database.save_message(user_id, "model", reply_text)
     
-    # 이미지가 있으면 이미지와 함께 전송, 없으면 텍스트만 전송
+    # 이미지가 있으면 다운로드 후 전송, 없으면 텍스트만 전송
     if image_url:
+        import httpx
+        import tempfile
+        import os
+        import asyncio
+        
+        max_retries = 2
+        img_content = None
+        
         try:
-            await context.bot.send_photo(chat_id=chat_id, photo=image_url, caption=reply_text)
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+            async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
+                for attempt in range(max_retries):
+                    try:
+                        img_resp = await client.get(image_url, timeout=20.0)
+                        if img_resp.status_code == 200:
+                            img_content = img_resp.content
+                            break
+                        else:
+                            logger.warning(f"Attempt {attempt+1} failed with status {img_resp.status_code}")
+                            await asyncio.sleep(2)
+                    except Exception as download_error:
+                        logger.warning(f"Download attempt {attempt+1} error: {download_error}")
+                        await asyncio.sleep(2)
+            
+            if img_content:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
+                    tmp_file.write(img_content)
+                    tmp_path = tmp_file.name
+                try:
+                    with open(tmp_path, 'rb') as photo:
+                        await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=reply_text)
+                finally:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+            else:
+                logger.error(f"Failed to download image after {max_retries} attempts.")
+                await update.message.reply_text(reply_text)
         except Exception as e:
-            logger.error(f"Failed to send photo: {e}")
+            logger.error(f"Failed to process and send photo: {e}")
             await update.message.reply_text(reply_text)
     else:
         await update.message.reply_text(reply_text)
+
+    # 7. [실시간 피드백] 교정 내용이 있으면 즉시 English Tips 메시지로 전송
+    if feedbacks:
+        tips_lines = ["📝 *English Tips*"]
+        for i, f in enumerate(feedbacks, 1):
+            original = f.get("original", "")
+            corrected = f.get("corrected", "")
+            explanation = f.get("explanation", "")
+            tips_lines.append(
+                f"\n*{i}.* ❌ _{original}_\n"
+                f"   ✅ _{corrected}_\n"
+                f"   💡 {explanation}"
+            )
+        tips_message = "\n".join(tips_lines)
+        await context.bot.send_message(chat_id=chat_id, text=tips_message, parse_mode="Markdown")
 
 
 # --- Main ---
