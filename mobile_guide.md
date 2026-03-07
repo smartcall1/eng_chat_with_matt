@@ -28,6 +28,74 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### 💡 시스템 패키지(`pkg`) vs 가상환경(`venv`) 구분하기
+David, 이 부분이 헷갈릴 수 있는데 아주 중요한 포인트야! 구조를 이렇게 이해하면 쉬워:
+
+1.  **시스템 패키지 (`pkg install ...`):**
+    *   이건 휴대폰(Termux 시스템) 전체에 까는 거야.
+    *   **도구(Rust, C 컴파일러)**나 **시스템 라이브러리(OpenSSL, libffi)** 같은 녀석들은 무조건 여기서 **범용(글로벌)**으로 깔아야 해. 가상환경은 이런 '망치와 못'같은 도구들을 직접 가질 수 없거든.
+    *   `python-cryptography`를 여기서 까는 이유는, 안드로이드용으로 미리 빌드된 '완제품'을 가져오기 위해서야.
+
+2.  **가상환경 패키지 (`pip install ...`):**
+    *   `venv` 안으로 들어가서 (`source venv/bin/activate`) 설치하는 건 이 프로젝트 전용이야.
+    *   `Gradio`, `google-genai` 같은 파이썬 라이브러리들은 **가상환경 안에** 까는 게 정석이야. 그래야 다른 프로젝트랑 꼬이지 않거든.
+
+**결론적으로:** 
+*   **'빌드 도구'**(rust, binutils)는 **밖에서 미리** 범용으로 깔고,
+*   **'파이썬 패키지'**(gradio, httpx 등)는 **가상환경 안에서** 까는 게 맞아!
+
+---
+
+### ⚠️ 자주 발생하는 오류 및 해결 방법
+
+#### 1. `cryptography` 설치 오류 해결 (빌드 도구 필수)
+Termux 환경은 PC와 달리 `cryptography` 같은 라이브러리를 설치할 때 직접 빌드(Compile)해야 하는 경우가 많아요. 이때 Rust나 C 컴파일러가 없으면 100% 실패합니다.
+
+**가장 확실한 해결 순서:**
+```bash
+# 1. 빌드 도구 및 라이브러리 일괄 설치
+pkg update
+pkg install -y binutils rust python-cryptography lld libffi openssl
+
+# 2. 환경 변수 설정 (컴파일러에게 안드로이드 환경임을 알림)
+export ANDROID_API_LEVEL=24
+
+# 3. pip로 cryptography 설치 시도
+pip install cryptography
+```
+
+#### 2. `Gradio` 또는 `google-genai` 설치 시 의존성 충돌
+`Gradio`나 `google-genai`를 설치할 때 `anyio`, `pydantic` 같은 라이브러리가 줄줄이 에러를 낸다면 아래 명령어로 **필수 의존성들을 한꺼번에 먼저 설치**해야 합니다.
+
+```bash
+# 의존성 패키지 강제 일괄 설치
+pip install anyio httpx pydantic requests typing-extensions websockets
+```
+
+그 후 다시 원래 설치하려던 패키지를 설치하세요:
+```bash
+pip install -r requirements.txt
+# 또는
+pip install gradio google-genai
+```
+
+#### 3. `ModuleNotFoundError: No module named 'tzdata'`
+봇 실행 시 스케줄러(APScheduler)가 타임존 데이터를 찾지 못해 발생하는 에러입니다.
+
+```bash
+# tzdata 패키지 설치
+pip install tzdata
+```
+
+그 후 다시 실행해 보세요:
+```bash
+python main.py
+```
+
+> [!IMPORTANT]
+> **왜 계속 실패할까요?**
+> Termux의 파이썬 환경과 안드로이드 시스템 라이브러리 버전이 안 맞아서 발생하는 경우가 많습니다. 위처럼 `pkg install python-cryptography`를 통해 Termux 팀이 미리 빌드해둔 버전을 먼저 깔아주는 것이 가장 똑똑한 방법입니다.
+
 ## 3. 백그라운드 상시 구동 (중요)
 Termux가 안드로이드 시스템에 의해 강제 종료되지 않도록 설정해야 합니다.
 

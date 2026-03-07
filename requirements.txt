@@ -13,6 +13,7 @@ APScheduler>=3.11.0
 
 # 타임존 처리 (APScheduler 필수 의존성)
 pytz
+tzdata
 
 # 비동기 HTTP 요청 (날씨 API 호출용)
 httpx
